@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>铁皮盒贴贴</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                   "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+    html { touch-action: manipulation; }
+  </style>
+  <link rel="stylesheet" href="./assets/style.css" />
+</head>
+<body>
+  <div class="app">
+
+    <div class="titlebar">
+      <div class="titlebar-text">✨ untitled - 铁皮盒贴贴</div>
+      <div class="titlebar-btns" aria-hidden="true">
+        <span class="win-btn win-cn">CN</span>
+        <span class="win-btn">_</span>
+        <span class="win-btn">□</span>
+        <span class="win-btn win-close">×</span>
+      </div>
+    </div>
+
+    <div class="menubar">
+      <div class="menu" id="menu-file"><button class="menu-item" type="button">文件</button>
+        <div class="menu-drop">
+          <button class="drop-item" type="button" data-act="clear">新建 / 清空</button>
+          <button class="drop-item" type="button" data-act="save">保存图片</button>
+        </div>
+      </div>
+      <div class="menu" id="menu-edit"><button class="menu-item" type="button">编辑</button>
+        <div class="menu-drop">
+          <button class="drop-item" type="button" data-act="undo">撤销</button>
+          <button class="drop-item" type="button" data-act="delete">删除选中</button>
+        </div>
+      </div>
+      <div class="menu" id="menu-help"><button class="menu-item" type="button">帮助</button>
+        <div class="menu-drop">
+          <button class="drop-item" type="button" data-act="help">玩法说明</button>
+        </div>
+      </div>
+      <button class="export-btn" id="btn-export" type="button">🖼️ 导出图片</button>
+    </div>
+
+    <div class="slider-row">
+      <span class="slider-cap slider-cap-small">小</span>
+      <input class="size-slider" id="size-slider" type="range" min="30" max="250" step="5" value="100" />
+      <span class="slider-cap">大</span>
+      <span class="slider-val" id="slider-val">100%</span>
+    </div>
+
+    <div class="slider-row" id="rotate-row" hidden>
+      <span class="slider-cap slider-cap-small">旋转</span>
+      <input class="size-slider" id="rotate-slider" type="range" min="-180" max="180" step="1" value="0" />
+      <span class="slider-val" id="rotate-val">0°</span>
+    </div>
+
+    <div class="slider-row" id="color-row" hidden>
+      <span class="slider-cap slider-cap-small">颜色</span>
+      <div class="color-dots" id="color-dots">
+        <button class="color-dot" type="button" data-color="#b8518f" style="background:#b8518f" aria-label="玫粉"></button>
+        <button class="color-dot" type="button" data-color="#3d5a99" style="background:#3d5a99" aria-label="雾蓝"></button>
+        <button class="color-dot" type="button" data-color="#3f8f6b" style="background:#3f8f6b" aria-label="墨绿"></button>
+        <button class="color-dot" type="button" data-color="#e0a52c" style="background:#e0a52c" aria-label="暖黄"></button>
+        <button class="color-dot" type="button" data-color="#d43d51" style="background:#d43d51" aria-label="正红"></button>
+        <button class="color-dot" type="button" data-color="#3a3335" style="background:#3a3335" aria-label="黑"></button>
+        <button class="color-dot" type="button" data-color="#ffffff" style="background:#ffffff" aria-label="白"></button>
+      </div>
+    </div>
+
+    <div class="slider-row" id="labelbg-row" hidden>
+      <span class="slider-cap slider-cap-small">标签色</span>
+      <div class="color-dots" id="labelbg-dots">
+        <button class="color-dot" type="button" data-color="#c2689a" style="background:#c2689a" aria-label="粉"></button>
+        <button class="color-dot" type="button" data-color="#f4a6b8" style="background:#f4a6b8" aria-label="浅粉"></button>
+        <button class="color-dot" type="button" data-color="#7d9bd8" style="background:#7d9bd8" aria-label="浅蓝"></button>
+        <button class="color-dot" type="button" data-color="#6ecfb0" style="background:#6ecfb0" aria-label="薄荷"></button>
+        <button class="color-dot" type="button" data-color="#f7d94c" style="background:#f7d94c" aria-label="黄"></button>
+        <button class="color-dot" type="button" data-color="#3a3335" style="background:#3a3335" aria-label="黑"></button>
+        <button class="color-dot" type="button" data-color="#ffffff" style="background:#ffffff" aria-label="白"></button>
+      </div>
+    </div>
+
+    <div class="slider-row" id="labeltext-row" hidden>
+      <span class="slider-cap slider-cap-small">字色</span>
+      <div class="color-dots" id="labeltext-dots">
+        <button class="color-dot" type="button" data-color="#ffffff" style="background:#ffffff" aria-label="白"></button>
+        <button class="color-dot" type="button" data-color="#3a3335" style="background:#3a3335" aria-label="黑"></button>
+        <button class="color-dot" type="button" data-color="#d43d51" style="background:#d43d51" aria-label="红"></button>
+        <button class="color-dot" type="button" data-color="#b8518f" style="background:#b8518f" aria-label="玫粉"></button>
+        <button class="color-dot" type="button" data-color="#3d5a99" style="background:#3d5a99" aria-label="雾蓝"></button>
+        <button class="color-dot" type="button" data-color="#3f8f6b" style="background:#3f8f6b" aria-label="墨绿"></button>
+        <button class="color-dot" type="button" data-color="#e0a52c" style="background:#e0a52c" aria-label="暖黄"></button>
+      </div>
+    </div>
+
+    <div class="slider-row" id="labelshape-row" hidden>
+      <span class="slider-cap slider-cap-small">形状</span>
+      <div class="color-dots" id="labelshape-dots">
+        <button class="shape-btn is-active" type="button" data-shape="rect" aria-label="圆角矩形"></button>
+        <button class="shape-btn" type="button" data-shape="pill" aria-label="胶囊"></button>
+        <button class="shape-btn" type="button" data-shape="bubble" aria-label="气泡"></button>
+        <button class="shape-btn shape-heart" type="button" data-shape="heart" aria-label="爱心"></button>
+        <button class="shape-btn shape-star" type="button" data-shape="star" aria-label="星形"></button>
+      </div>
+    </div>
+
+    <div class="stage-wrap" id="stage-wrap">
+      <div class="stage-frame">
+        <canvas id="stage" width="1080" height="1440"></canvas>
+        <div class="stage-hint" id="stage-hint">点下方素材行添加 · 拖动调整位置 · 双指旋转缩放</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button class="tool-btn" id="btn-tin" type="button">铁盒形状</button>
+      <button class="tool-btn" id="btn-clear" type="button">清空</button>
+      <button class="tool-btn" id="btn-save" type="button">保存</button>
+      <button class="tool-btn" id="btn-undo" type="button">撤销</button>
+      <span class="tool-space"></span>
+      <button class="tool-btn" id="btn-zoomout" type="button">-</button>
+      <span class="zoom-label" id="zoom-label">1:1</span>
+      <button class="tool-btn" id="btn-zoomin" type="button">+</button>
+    </div>
+
+    <div class="materials" id="materials">
+      <div class="mat-row" data-group="bg">
+        <span class="mat-label">背景</span>
+        <div class="mat-scroll" id="bg-row"></div>
+      </div>
+      <div class="mat-row" data-group="photo">
+        <span class="mat-label">照片</span>
+        <div class="mat-scroll">
+          <button class="mat-decal" type="button" data-add="polaroid"><img src="./assets/frame/f_polaroid.png" alt="拍立得" /></button>
+          <button class="mat-decal" type="button" data-add="strip"><img src="./assets/frame/f_strip.png" alt="连拍条" /></button>
+          <button class="mat-decal" type="button" data-add="heart"><img src="./assets/frame/f_heart.png" alt="心形框" /></button>
+          <button class="mat-decal" type="button" data-add="stamp"><img src="./assets/frame/f_stamp.png" alt="邮票框" /></button>
+          <button class="mat-decal" type="button" data-add="cam1"><img src="./assets/cam/cam1.png" alt="白相机" /></button>
+          <button class="mat-decal" type="button" data-add="cam2"><img src="./assets/cam/cam2.png" alt="银相机" /></button>
+          <button class="mat-decal" type="button" data-add="cam3"><img src="./assets/cam/cam3.png" alt="粉相机" /></button>
+        </div>
+      </div>
+      <div class="mat-row" data-group="sticker">
+        <span class="mat-label">字母</span>
+        <div class="mat-scroll" id="bead-row"></div>
+      </div>
+      <div class="mat-row" data-group="decal">
+        <span class="mat-label">图案</span>
+        <div class="mat-scroll">
+          <button class="mat-decal" type="button" data-decal="star_text"><img src="./assets/decal/decal_star_text.png" alt="星星贴纸" /></button>
+          <button class="mat-decal" type="button" data-decal="kaomoji"><img src="./assets/decal/decal_kaomoji.png" alt="颜文字" /></button>
+          <button class="mat-decal" type="button" data-decal="bow"><img src="./assets/decal/decal_bow.png" alt="蝴蝶结" /></button>
+          <button class="mat-decal" type="button" data-decal="star_best"><img src="./assets/decal/decal_star_best.png" alt="文字星星" /></button>
+          <button class="mat-decal" type="button" data-decal="bubbles"><img src="./assets/decal/decal_bubbles.png" alt="对话气泡" /></button>
+          <button class="mat-decal" type="button" data-decal="star_bloom"><img src="./assets/decal/decal_star_bloom.png" alt="蓝色星星" /></button>
+          <button class="mat-decal" type="button" data-decal="chat"><img src="./assets/decal/decal_chat.png" alt="聊天气泡" /></button>
+          <button class="mat-decal" type="button" data-decal="heart_text"><img src="./assets/decal/decal_heart_text.png" alt="爱心便签" /></button>
+          <button class="mat-decal" type="button" data-decal="camera"><img src="./assets/decal/decal_camera.png" alt="相机" /></button>
+          <button class="mat-decal" type="button" data-decal="patches"><img src="./assets/decal/decal_patches.png" alt="刺绣星星" /></button>
+          <button class="mat-decal" type="button" data-decal="license_cream"><img src="./assets/decal/decal_license_cream.png" alt="奶油许可证" /></button>
+          <button class="mat-decal" type="button" data-decal="license_blue"><img src="./assets/decal/decal_license_blue.png" alt="蓝色许可证" /></button>
+          <button class="mat-decal" type="button" data-decal="license_purple"><img src="./assets/decal/decal_license_purple.png" alt="紫色许可证" /></button>
+        </div>
+      </div>
+      <div class="mat-row" data-group="obj">
+        <span class="mat-label">摆件</span>
+        <div class="mat-scroll">
+          <button class="mat-decal" type="button" data-decal="obj_earbud"><img src="./assets/obj/obj_earbud.png" alt="有线耳机" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_glasses"><img src="./assets/obj/obj_glasses.png" alt="黑框眼镜" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_tape"><img src="./assets/obj/obj_tape.png" alt="磁带" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_cd"><img src="./assets/obj/obj_cd.png" alt="CD 光盘" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_clip1"><img src="./assets/obj/obj_clip1.png" alt="深蓝夹子" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_clip2"><img src="./assets/obj/obj_clip2.png" alt="浅蓝 Archive 夹子" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_clip3"><img src="./assets/obj/obj_clip3.png" alt="粉色 Archive 夹子" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_clip4"><img src="./assets/obj/obj_clip4.png" alt="波点夹子" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_pin1"><img src="./assets/obj/obj_pin1.png" alt="浅蓝回形针" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_pin2"><img src="./assets/obj/obj_pin2.png" alt="粉色回形针" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_cardvert"><img src="./assets/obj/obj_cardvert.png" alt="竖版卡包挂饰" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_cardhorz"><img src="./assets/obj/obj_cardhorz.png" alt="横版卡包挂饰" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_phone"><img src="./assets/obj/obj_phone.png" alt="翻盖手机" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_charm"><img src="./assets/obj/obj_charm.png" alt="别针挂坠" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_cherry"><img src="./assets/obj/obj_cherry.png" alt="樱桃挂坠" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_star"><img src="./assets/obj/obj_star.png" alt="星星挂坠" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_apple"><img src="./assets/obj/obj_apple.png" alt="苹果挂坠" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_bow_mint"><img src="./assets/obj/obj_bow_mint.png" alt="薄荷格纹蝴蝶结" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_bow_pink"><img src="./assets/obj/obj_bow_pink.png" alt="粉格纹蝴蝶结" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_bow_navy"><img src="./assets/obj/obj_bow_navy.png" alt="深蓝格纹蝴蝶结" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_btn_star"><img src="./assets/obj/obj_btn_star.png" alt="蓝绿星星纽扣" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_btn_heart"><img src="./assets/obj/obj_btn_heart.png" alt="黄色爱心纽扣" /></button>
+          <button class="mat-decal" type="button" data-decal="obj_btn_cloud"><img src="./assets/obj/obj_btn_cloud.png" alt="蓝色云朵纽扣" /></button>
+        </div>
+      </div>
+      <div class="mat-row" data-group="sticker">
+        <span class="mat-label">贴纸</span>
+        <div class="mat-scroll">
+          <button class="mat-decal" type="button" data-decal="stk_green"><img src="./assets/decal/decal_stk_green.png" alt="绿色胶带" /></button>
+          <button class="mat-decal" type="button" data-decal="stk_grid"><img src="./assets/decal/decal_stk_grid.png" alt="绿格纹胶带" /></button>
+          <button class="mat-decal" type="button" data-decal="stk_blue"><img src="./assets/decal/decal_stk_blue.png" alt="蓝格纹胶带" /></button>
+          <button class="mat-decal" type="button" data-decal="stk_diamond_blue"><img src="./assets/decal/decal_stk_diamond_blue.png" alt="蓝菱格胶带" /></button>
+          <button class="mat-decal" type="button" data-decal="stk_diamond_yellow"><img src="./assets/decal/decal_stk_diamond_yellow.png" alt="黄菱格胶带" /></button>
+          <button class="mat-decal" type="button" data-decal="stk_red"><img src="./assets/decal/decal_stk_red.png" alt="红格纹胶带" /></button>
+        </div>
+      </div>
+      <div class="mat-row" data-group="text">
+        <span class="mat-label">文字</span>
+        <div class="mat-scroll">
+          <button class="mat-btn" type="button" data-add="script">花体标题…</button>
+          <button class="mat-btn" type="button" data-add="label">短句标签…</button>
+        </div>
+      </div>
+      <div class="mat-row" data-group="upload">
+        <span class="mat-label">上传</span>
+        <div class="mat-scroll" id="upload-row"></div>
+      </div>
+    </div>
+
+    <div class="statusbar">
+      <span>✨ × <span id="st-count">0</span></span>
+      <span>缩放 <span id="st-zoom">100%</span></span>
+      <span class="status-tip">点素材行添加 · 拖动摆放</span>
+    </div>
+  </div>
+
+  <input type="file" id="file-input" accept="image/*" multiple hidden />
+  <input type="file" id="bg-input" accept="image/*" hidden />
+  <input type="file" id="upload-input" accept="image/*" hidden />
+
+  <div class="modal" id="modal" hidden>
+    <div class="modal-box">
+      <div class="modal-title" id="modal-title">输入</div>
+      <input class="modal-input" id="modal-input" type="text" maxlength="16" />
+      <div class="modal-hint" id="modal-hint"></div>
+      <div class="modal-actions">
+        <button class="tool-btn" id="modal-cancel" type="button">取消</button>
+        <button class="tool-btn tool-btn-primary" id="modal-ok" type="button">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal-help" hidden>
+    <div class="modal-box">
+      <div class="modal-title">玩法说明</div>
+      <div class="help-body">
+        <p>1. 点「背景」换底纹，最后一格可上传自己的背景图。</p>
+        <p>2. 「照片」选相册图（连拍条选 3 张），装进拍立得 / 连拍条 / 心形框 / 邮票框或相机相框。</p>
+        <p>3. 「字母」输入名字自动拆成字母块；「图案」「摆件」「贴纸」「文字」随意点缀。</p>
+        <p>4. 最下面「上传」行有 10 个位置：点空格传自己的图，之后点缩略图就能摆进盒子，点右上 × 可清空换图。</p>
+        <p>5. 选中「花体标题」可换字色；选中「短句标签」可换标签色、字色和便签形状。</p>
+        <p>6. 拖动摆放，双指旋转缩放，滑杆调大小和角度，撤销可回头。</p>
+        <p>7. 完成后点「导出图片」保存到相册。</p>
+      </div>
+      <div class="modal-actions">
+        <button class="tool-btn tool-btn-primary" id="help-ok" type="button">知道啦</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal-tin" hidden>
+    <div class="modal-box">
+      <div class="modal-title">第一步：选择铁盒形状</div>
+      <div class="tin-opts">
+        <button class="tin-opt" type="button" data-tin="rect"><img src="./assets/tins/tin_rect.png" alt="长方形铁盒" /></button>
+        <button class="tin-opt" type="button" data-tin="star"><img src="./assets/tins/tin_star.png" alt="星形铁盒" /></button>
+        <button class="tin-opt" type="button" data-tin="heart"><img src="./assets/tins/tin_heart.png" alt="心形铁盒" /></button>
+      </div>
+      <div class="modal-actions">
+        <button class="tool-btn" id="tin-cancel" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal-export" hidden>
+    <div class="modal-box">
+      <div class="modal-title">导出预览</div>
+      <img class="export-preview" id="export-preview" alt="导出预览" />
+      <div class="modal-hint">当前环境不支持直接存相册，长按图片保存（若被禁用请使用「保存」按钮）</div>
+      <div class="modal-actions">
+        <button class="tool-btn" id="export-close" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="./assets/main.js"></script>
+</body>
+</html>
