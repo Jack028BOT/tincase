@@ -50,6 +50,7 @@
     stBow: { w: 170, h: 120 },
     stKeychain: { w: 140, h: 200 },
     polaroid: { w: 300, h: 360 },
+    rectpol: { w: 340, h: 260 },
     strip: { w: 220, h: 600 },
     heart: { w: 300, h: 290 },
     stamp: { w: 320, h: 360 },
@@ -466,7 +467,15 @@
         sr[2] * item.w, sr[3] * item.h, item.photo);
       return;
     }
-    if (k === 'polaroid') {
+    if (k === 'rectpol') {
+      c.fillStyle = 'rgba(60,30,40,0.25)';
+      rr(c, -170 + 5, -130 + 7, 340, 260, 10); c.fill();
+      c.fillStyle = '#ffffff';
+      rr(c, -170, -130, 340, 260, 10); c.fill();
+      drawPhotoCover(c, item, -154, -114, 308, 228, item.photo);
+      c.strokeStyle = '#e8dfe3'; c.lineWidth = 2;
+      c.strokeRect(-154, -114, 308, 228);
+    } else if (k === 'polaroid') {
       c.fillStyle = 'rgba(60,30,40,0.25)';
       rr(c, -150 + 5, -180 + 7, 300, 360, 10); c.fill();
       c.fillStyle = '#ffffff';
@@ -591,7 +600,7 @@
     if (k === 'tin') drawTin(c, item);
     else if (k === 'decal') drawDecal(c, item);
     else if (k === 'tile') drawTile(c, item);
-    else if (k === 'polaroid' || k === 'strip' || k === 'heart' || k === 'stamp' ||
+    else if (k === 'rectpol' || k === 'polaroid' || k === 'strip' || k === 'heart' || k === 'stamp' ||
              k === 'cam1' || k === 'cam2' || k === 'cam3') drawPhotoFrame(c, item);
     else if (k.indexOf('st') === 0) drawSticker(c, item);
     else drawTextItem(c, item);
@@ -716,7 +725,7 @@
   var photoPinch = null; /* {item, d0, pz0} 照片缩放双指 */
 
   function isFrameKind(k) {
-    return k === 'polaroid' || k === 'strip' || k === 'heart' || k === 'stamp' ||
+    return k === 'rectpol' || k === 'polaroid' || k === 'strip' || k === 'heart' || k === 'stamp' ||
            k === 'cam1' || k === 'cam2' || k === 'cam3';
   }
 
@@ -1398,7 +1407,7 @@
         if (v) addItem('label', { text: v, w: measureTextItem('label', v), h: 68, shape: 'rect' });
       });
     }
-    else if (add === 'polaroid' || add === 'strip' || add === 'heart' || add === 'stamp' ||
+    else if (add === 'rectpol' || add === 'polaroid' || add === 'strip' || add === 'heart' || add === 'stamp' ||
              add === 'cam1' || add === 'cam2' || add === 'cam3') {
       pendingFrame = add;
       if (add === 'strip') toast('连拍条：请在相册中选择 3 张照片');
