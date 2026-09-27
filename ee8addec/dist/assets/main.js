@@ -401,11 +401,11 @@
     if (photo && photo.z > 1) {
       var z = Math.min(3, Math.max(1, photo.z));
       var nw = sw / z, nh = sh / z;
-      /* 照片内偏移：目标像素 → 源图像素，并钳制在图像范围内 */
+      /* 照片内偏移：手指向右 → 画面内容向右（取景窗口反向移动），并钳制在图像范围内 */
       var px = (photo.ox || 0) * (nw / w);
       var py = (photo.oy || 0) * (nh / h);
-      sx = Math.min(img.width - nw, Math.max(0, sx + (sw - nw) / 2 + px));
-      sy = Math.min(img.height - nh, Math.max(0, sy + (sh - nh) / 2 + py));
+      sx = Math.min(img.width - nw, Math.max(0, sx + (sw - nw) / 2 - px));
+      sy = Math.min(img.height - nh, Math.max(0, sy + (sh - nh) / 2 - py));
       sw = nw; sh = nh;
     }
     c.save();
