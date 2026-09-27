@@ -227,7 +227,7 @@
     return '700 ' + size + 'px -apple-system, "Segoe UI", "PingFang SC", sans-serif';
   }
 
-  var OBJS = ['earbud', 'glasses', 'tape', 'cd',
+  var OBJS = ['earbud', 'airpods', 'case_pink', 'glasses', 'tape', 'cd',
               'clip1', 'clip2', 'clip3', 'clip4', 'pin1', 'pin2',
               'cardvert', 'cardhorz', 'phone',
               'charm', 'cherry', 'star', 'apple',
