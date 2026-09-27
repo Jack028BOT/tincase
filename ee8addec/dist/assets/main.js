@@ -606,6 +606,8 @@
     c.restore();
   }
 
+  var lastRenderedCount = -1;
+
   function render() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, W, H);
@@ -613,8 +615,23 @@
     for (var i = 0; i < state.items.length; i++) drawItem(ctx, state.items[i]);
     var selItem = selected();
     if (selItem) drawSelection(ctx, selItem);
-    stCountEl.textContent = String(state.items.length);
-    stageHint.hidden = state.items.length > 0;
+    /* DOM 只在数量变化时更新，避免每帧触发布局 */
+    if (state.items.length !== lastRenderedCount) {
+      lastRenderedCount = state.items.length;
+      stCountEl.textContent = String(state.items.length);
+      stageHint.hidden = state.items.length > 0;
+    }
+  }
+
+  /* 拖动/缩放中的重绘合并到每帧一次，避免高频 pointermove 卡顿 */
+  var renderPending = false;
+  function scheduleRender() {
+    if (renderPending) return;
+    renderPending = true;
+    requestAnimationFrame(function () {
+      renderPending = false;
+      render();
+    });
   }
 
   function drawSelection(c, item) {
@@ -669,11 +686,14 @@
 
   /* ---------------- 命中与手势 ---------------- */
 
+  /* 手势期间缓存画布位置，避免每次 move 触发 getBoundingClientRect 重排 */
+  var cachedRect = null;
+
   function toCanvasPoint(clientX, clientY) {
-    var rect = canvas.getBoundingClientRect();
+    if (!cachedRect) cachedRect = canvas.getBoundingClientRect();
     return {
-      x: (clientX - rect.left) * W / rect.width,
-      y: (clientY - rect.top) * H / rect.height
+      x: (clientX - cachedRect.left) * W / cachedRect.width,
+      y: (clientY - cachedRect.top) * H / cachedRect.height
     };
   }
 
@@ -707,6 +727,7 @@
 
   function onDown(e) {
     e.preventDefault();
+    cachedRect = canvas.getBoundingClientRect();
     var p = toCanvasPoint(e.clientX, e.clientY);
     pointers[e.pointerId] = { x: p.x, y: p.y, cx: e.clientX, cy: e.clientY };
     pointerCount++;
@@ -763,7 +784,7 @@
       ph.z = Math.min(3, Math.max(1, photoPinch.pz0 * pd / photoPinch.d0));
       if (ph.z <= 1) { ph.ox = 0; ph.oy = 0; }
       syncSlider();
-      render();
+      scheduleRender();
       return;
     }
 
@@ -776,7 +797,7 @@
       it.s = Math.min(3, Math.max(0.2, pinch.s0 * d / pinch.d0));
       it.r = pinch.r0 + Math.round((ang - pinch.a0) * 180 / Math.PI);
       syncSlider();
-      render();
+      scheduleRender();
       return;
     }
 
@@ -795,7 +816,7 @@
           snapshot();
           drag.moved = true;
         }
-        render();
+        scheduleRender();
         return;
       }
       item.x = p.x - drag.offX;
@@ -804,7 +825,7 @@
         snapshot();
         drag.moved = true;
       }
-      render();
+      scheduleRender();
     }
   }
 
@@ -817,6 +838,7 @@
       drag = null;
       pinch = null;
       photoPinch = null;
+      cachedRect = null;
       render();
       return;
     }
@@ -824,6 +846,7 @@
       pinch = null;
       photoPinch = null;
       drag = null;
+      cachedRect = null;
     }
   }
 
