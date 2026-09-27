@@ -1319,7 +1319,15 @@
     })(menus[mi]);
   }
   document.addEventListener('click', closeMenus);
-  document.getElementById('help-ok').addEventListener('click', function () { modalHelpEl.hidden = true; });
+  var firstRunHelp = true;
+  document.getElementById('help-ok').addEventListener('click', function () {
+    modalHelpEl.hidden = true;
+    /* 首次进入：看完玩法说明接着选铁盒形状 */
+    if (firstRunHelp) {
+      firstRunHelp = false;
+      modalTinEl.hidden = false;
+    }
+  });
 
   /* ---------------- 弹窗输入 ---------------- */
 
@@ -1561,5 +1569,6 @@
   syncSlider();
   setZoom(100);
   render();
-  modalTinEl.hidden = false;
+  /* 首次进入引导：先看玩法说明，再选铁盒形状 */
+  modalHelpEl.hidden = false;
 })();
