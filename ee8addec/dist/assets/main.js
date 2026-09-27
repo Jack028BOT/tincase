@@ -382,7 +382,7 @@
     }
   }
 
-  function drawPhotoCover(c, item, x, y, w, h) {
+  function drawPhotoCover(c, item, x, y, w, h, photo) {
     var entry = imgPool[item.imgKey];
     if (!entry || !entry.loaded) {
       c.fillStyle = '#f0e2e9';
@@ -398,6 +398,16 @@
     var sw = img.width, sh = img.height, sx = 0, sy = 0;
     if (ir > br) { sw = img.height * br; sx = (img.width - sw) / 2; }
     else { sh = img.width / br; sy = (img.height - sh) / 2; }
+    if (photo && photo.z > 1) {
+      var z = Math.min(3, Math.max(1, photo.z));
+      var nw = sw / z, nh = sh / z;
+      /* 照片内偏移：目标像素 → 源图像素，并钳制在图像范围内 */
+      var px = (photo.ox || 0) * (nw / w);
+      var py = (photo.oy || 0) * (nh / h);
+      sx = Math.min(img.width - nw, Math.max(0, sx + (sw - nw) / 2 + px));
+      sy = Math.min(img.height - nh, Math.max(0, sy + (sh - nh) / 2 + py));
+      sw = nw; sh = nh;
+    }
     c.save();
     c.beginPath(); c.rect(x, y, w, h); c.clip();
     c.drawImage(img, sx, sy, sw, sh, x, y, w, h);
@@ -453,7 +463,7 @@
       var sr = CAM_SCREEN[k];
       drawPhotoCover(c, item,
         -item.w / 2 + sr[0] * item.w, -item.h / 2 + sr[1] * item.h,
-        sr[2] * item.w, sr[3] * item.h);
+        sr[2] * item.w, sr[3] * item.h, item.photo);
       return;
     }
     if (k === 'polaroid') {
@@ -461,7 +471,7 @@
       rr(c, -150 + 5, -180 + 7, 300, 360, 10); c.fill();
       c.fillStyle = '#ffffff';
       rr(c, -150, -180, 300, 360, 10); c.fill();
-      drawPhotoCover(c, item, -132, -162, 264, 264);
+      drawPhotoCover(c, item, -132, -162, 264, 264, item.photo);
       c.strokeStyle = '#e8dfe3'; c.lineWidth = 2;
       c.strokeRect(-132, -162, 264, 264);
     } else if (k === 'strip') {
@@ -471,7 +481,7 @@
       rr(c, -110, -300, 220, 600, 12); c.fill();
       for (var i = 0; i < 3; i++) {
         var sub = { imgKey: (item.imgKeys && item.imgKeys[i]) || item.imgKey };
-        drawPhotoCover(c, sub, -90, -280 + i * 196, 180, 180);
+        drawPhotoCover(c, sub, -90, -280 + i * 196, 180, 180, item.photo);
       }
     } else if (k === 'stamp') {
       c.save();
@@ -483,7 +493,7 @@
       c.fillStyle = '#fdfaf6';
       stampPath(c, 160, 180, 13, 8, 9);
       c.fill();
-      drawPhotoCover(c, item, -128, -148, 256, 296);
+      drawPhotoCover(c, item, -128, -148, 256, 296, item.photo);
       c.strokeStyle = 'rgba(180,160,170,0.45)';
       c.lineWidth = 2;
       c.strokeRect(-128, -148, 256, 296);
@@ -491,7 +501,7 @@
       c.save();
       heartPath(c, 130);
       c.clip();
-      drawPhotoCover(c, item, -120, -120, 240, 240);
+      drawPhotoCover(c, item, -120, -120, 240, 240, item.photo);
       c.restore();
       heartPath(c, 130);
       c.strokeStyle = '#f76fa0'; c.lineWidth = 14; c.stroke();
@@ -681,8 +691,19 @@
 
   var pointers = {};
   var pointerCount = 0;
-  var drag = null;   /* {item, offX, offY, moved} */
+  var drag = null;   /* {item, offX, offY, moved} 或照片模式 {item, photoMode, sx, sy, ox0, oy0, moved} */
   var pinch = null;  /* {item, d0, a0, s0, r0} */
+  var photoPinch = null; /* {item, d0, pz0} 照片缩放双指 */
+
+  function isFrameKind(k) {
+    return k === 'polaroid' || k === 'strip' || k === 'heart' || k === 'stamp' ||
+           k === 'cam1' || k === 'cam2' || k === 'cam3';
+  }
+
+  function ensurePhoto(it) {
+    if (!it.photo) it.photo = { z: 1, ox: 0, oy: 0 };
+    return it.photo;
+  }
 
   function onDown(e) {
     e.preventDefault();
@@ -696,16 +717,29 @@
       selectedId = it.id;
       syncSlider();
       if (pointerCount === 1) {
-        drag = { item: it, offX: p.x - it.x, offY: p.y - it.y, moved: false, sx: p.x, sy: p.y };
+        if (photoEdit && isFrameKind(it.kind) && it.photo && it.photo.z > 1) {
+          /* 照片编辑模式：拖动平移相框内照片 */
+          drag = { item: it, photoMode: true, sx: p.x, sy: p.y, ox0: it.photo.ox || 0, oy0: it.photo.oy || 0, moved: false };
+        } else {
+          drag = { item: it, offX: p.x - it.x, offY: p.y - it.y, moved: false, sx: p.x, sy: p.y };
+        }
       } else if (pointerCount === 2 && drag && drag.item === it) {
         var ids = Object.keys(pointers);
         var p1 = pointers[ids[0]], p2 = pointers[ids[1]];
-        pinch = {
-          item: it,
-          d0: Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2)),
-          a0: Math.atan2(p2.y - p1.y, p2.x - p1.x),
-          s0: it.s, r0: it.r
-        };
+        if (drag.photoMode) {
+          photoPinch = {
+            item: it,
+            d0: Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2)),
+            pz0: it.photo.z
+          };
+        } else {
+          pinch = {
+            item: it,
+            d0: Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2)),
+            a0: Math.atan2(p2.y - p1.y, p2.x - p1.x),
+            s0: it.s, r0: it.r
+          };
+        }
         drag.moved = true;
       }
     } else {
@@ -719,6 +753,19 @@
     if (!pointers[e.pointerId]) return;
     var p = toCanvasPoint(e.clientX, e.clientY);
     pointers[e.pointerId] = { x: p.x, y: p.y, cx: e.clientX, cy: e.clientY };
+
+    if (photoPinch && pointerCount >= 2) {
+      var pds = Object.keys(pointers);
+      var pd1 = pointers[pds[0]], pd2 = pointers[pds[1]];
+      var pd = Math.sqrt(Math.pow(pd2.x - pd1.x, 2) + Math.pow(pd2.y - pd1.y, 2));
+      var pit = photoPinch.item;
+      var ph = ensurePhoto(pit);
+      ph.z = Math.min(3, Math.max(1, photoPinch.pz0 * pd / photoPinch.d0));
+      if (ph.z <= 1) { ph.ox = 0; ph.oy = 0; }
+      syncSlider();
+      render();
+      return;
+    }
 
     if (pinch && pointerCount >= 2) {
       var ids = Object.keys(pointers);
@@ -735,6 +782,22 @@
 
     if (drag && pointerCount === 1) {
       var item = drag.item;
+      if (drag.photoMode) {
+        /* 照片模式：画布位移 → 元素本地坐标（考虑旋转与缩放） */
+        if (!item.photo) item.photo = { z: 1, ox: 0, oy: 0 };
+        var ddx = p.x - drag.sx, ddy = p.y - drag.sy;
+        var a = -deg2rad(item.r);
+        var lx = (ddx * Math.cos(a) - ddy * Math.sin(a)) / item.s;
+        var ly = (ddx * Math.sin(a) + ddy * Math.cos(a)) / item.s;
+        item.photo.ox = drag.ox0 + lx;
+        item.photo.oy = drag.oy0 + ly;
+        if (!drag.moved && Math.abs(ddx) + Math.abs(ddy) > 4) {
+          snapshot();
+          drag.moved = true;
+        }
+        render();
+        return;
+      }
       item.x = p.x - drag.offX;
       item.y = p.y - drag.offY;
       if (!drag.moved && Math.abs(p.x - drag.sx) + Math.abs(p.y - drag.sy) > 4) {
@@ -753,11 +816,13 @@
     if (drag && pointerCount === 0) {
       drag = null;
       pinch = null;
+      photoPinch = null;
       render();
       return;
     }
-    if (pinch && pointerCount < 2) {
+    if ((pinch || photoPinch) && pointerCount < 2) {
       pinch = null;
+      photoPinch = null;
       drag = null;
     }
   }
@@ -795,6 +860,14 @@
   var shapeBtns = [].slice.call(document.querySelectorAll('#labelshape-dots .shape-btn'));
   var shapeDirty = false;
 
+  var photoRow = document.getElementById('photo-row');
+  var photoSlider = document.getElementById('photo-slider');
+  var photoValEl = document.getElementById('photo-val');
+  var photoMoveBtn = document.getElementById('photo-move-btn');
+  var photoEdit = false;
+  var photoEditItemId = null;
+  var photoDirty = false;
+
   function markActiveDots(dots, cur) {
     for (var i = 0; i < dots.length; i++) {
       var on = dots[i].getAttribute('data-color') === cur;
@@ -815,10 +888,25 @@
     rotateRow.hidden = !it;
     var isScript = !!it && it.kind === 'script';
     var isLabel = !!it && it.kind === 'label';
+    var isFrame = !!it && isFrameKind(it.kind);
     colorRow.hidden = !isScript;
     labelbgRow.hidden = !isLabel;
     labeltextRow.hidden = !isLabel;
     labelshapeRow.hidden = !isLabel;
+    /* 照片编辑模式：切换选中对象时自动退出 */
+    if (!isFrame || !it || it.id !== photoEditItemId) {
+      photoEdit = false;
+      photoEditItemId = it ? it.id : null;
+    }
+    photoRow.hidden = !isFrame;
+    if (isFrame) {
+      photoDirty = false;
+      var ph = it.photo || { z: 1, ox: 0, oy: 0 };
+      photoSlider.value = String(Math.min(300, Math.max(100, Math.round(ph.z * 100))));
+      photoValEl.textContent = photoSlider.value + '%';
+      photoMoveBtn.className = photoEdit ? 'tool-btn tool-btn-primary' : 'tool-btn';
+      photoMoveBtn.textContent = photoEdit ? '调整中…' : '移动照片';
+    }
     if (isScript) {
       colorDirty = false;
       markActiveDots(colorDots, it.color || SCRIPT_COLOR);
@@ -896,6 +984,35 @@
   });
   rotateSlider.addEventListener('change', function () {
     rotateDirty = false;
+  });
+
+  photoSlider.addEventListener('input', function () {
+    var it = selected();
+    if (!it || !isFrameKind(it.kind)) return;
+    if (!photoDirty) { snapshot(); photoDirty = true; }
+    var ph = ensurePhoto(it);
+    ph.z = parseInt(photoSlider.value, 10) / 100;
+    if (ph.z <= 1) { ph.ox = 0; ph.oy = 0; }
+    photoValEl.textContent = photoSlider.value + '%';
+    render();
+  });
+  photoSlider.addEventListener('change', function () {
+    photoDirty = false;
+  });
+
+  photoMoveBtn.addEventListener('click', function () {
+    var it = selected();
+    if (!it || !isFrameKind(it.kind)) return;
+    photoEdit = !photoEdit;
+    photoEditItemId = it.id;
+    if (photoEdit) {
+      toast('拖动调整照片位置，双指缩放照片');
+    } else {
+      ensurePhoto(it);
+      if (it.photo.z <= 1) { it.photo.ox = 0; it.photo.oy = 0; }
+    }
+    syncSlider();
+    render();
   });
 
   sliderEl.addEventListener('input', function () {

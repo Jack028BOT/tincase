@@ -68,6 +68,13 @@
       <span class="slider-val" id="rotate-val">0°</span>
     </div>
 
+    <div class="slider-row" id="photo-row" hidden>
+      <span class="slider-cap slider-cap-small">照片</span>
+      <input class="size-slider" id="photo-slider" type="range" min="100" max="300" step="5" value="100" />
+      <span class="slider-val" id="photo-val">100%</span>
+      <button class="tool-btn" id="photo-move-btn" type="button">移动照片</button>
+    </div>
+
     <div class="slider-row" id="color-row" hidden>
       <span class="slider-cap slider-cap-small">颜色</span>
       <div class="color-dots" id="color-dots">
@@ -259,8 +266,9 @@
         <p>3. 「字母」输入名字自动拆成字母块；「图案」「摆件」「贴纸」「文字」随意点缀。</p>
         <p>4. 最下面「上传」行有 10 个位置：点空格传自己的图，之后点缩略图就能摆进盒子，点右上 × 可清空换图。</p>
         <p>5. 选中「花体标题」可换字色；选中「短句标签」可换标签色、字色和便签形状。</p>
-        <p>6. 拖动摆放，双指旋转缩放，滑杆调大小和角度，撤销可回头。</p>
-        <p>7. 完成后点「导出图片」保存到相册。</p>
+        <p>6. 选中相框或相机后，用「照片」滑杆放大框内照片，点「移动照片」后拖动调整构图（双指也可缩放），再点一次退出。</p>
+        <p>7. 拖动摆放，双指旋转缩放，滑杆调大小和角度，撤销可回头。</p>
+        <p>8. 完成后点「导出图片」保存到相册。</p>
       </div>
       <div class="modal-actions">
         <button class="tool-btn tool-btn-primary" id="help-ok" type="button">知道啦</button>

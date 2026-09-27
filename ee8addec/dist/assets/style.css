@@ -240,6 +240,15 @@
   border-radius: 50%;
 }
 .slider-val { min-width: 48px; text-align: right; font-size: 14px; }
+.slider-row .tool-btn {
+  flex-shrink: 0;
+  margin-left: 8px;
+  margin-right: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
 
 /* ---------- 画布区 ---------- */
 .stage-wrap {
