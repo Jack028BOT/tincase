@@ -717,7 +717,7 @@
       selectedId = it.id;
       syncSlider();
       if (pointerCount === 1) {
-        if (photoEdit && isFrameKind(it.kind) && it.photo && it.photo.z > 1) {
+        if (photoEdit && isFrameKind(it.kind) && it.photo) {
           /* 照片编辑模式：拖动平移相框内照片 */
           drag = { item: it, photoMode: true, sx: p.x, sy: p.y, ox0: it.photo.ox || 0, oy0: it.photo.oy || 0, moved: false };
         } else {
@@ -1006,6 +1006,14 @@
     photoEdit = !photoEdit;
     photoEditItemId = it.id;
     if (photoEdit) {
+      var ph = ensurePhoto(it);
+      if (ph.z <= 1) {
+        /* 100% 时照片铺满相框、没有移动余量，自动放大让拖动立刻生效 */
+        ph.z = 1.3;
+        ph.ox = 0; ph.oy = 0;
+        photoSlider.value = '130';
+        photoValEl.textContent = '130%';
+      }
       toast('拖动调整照片位置，双指缩放照片');
     } else {
       ensurePhoto(it);
