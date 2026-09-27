@@ -158,7 +158,14 @@
   border-bottom: 2px solid #f0a8c3;
 }
 .slider-cap { font-size: 13px; margin-left: 8px; }
-.slider-cap-small { margin-left: 0; margin-right: 8px; }
+.slider-cap-small { width: 40px; margin-left: 0; margin-right: 8px; }
+.slider-side {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 132px;
+}
 .color-dots { display: flex; align-items: center; flex: 1; }
 .color-dot {
   width: 26px;
