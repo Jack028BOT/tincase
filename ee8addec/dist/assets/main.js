@@ -901,13 +901,13 @@
   var rotateDirty = false;
 
   var colorRow = document.getElementById('color-row');
-  var colorDots = [].slice.call(document.querySelectorAll('#color-dots .color-dot'));
+  var colorDots = document.getElementById('color-dots');
   var colorDirty = false;
   var labelbgRow = document.getElementById('labelbg-row');
-  var labelbgDots = [].slice.call(document.querySelectorAll('#labelbg-dots .color-dot'));
+  var labelbgDots = document.getElementById('labelbg-dots');
   var labelbgDirty = false;
   var labeltextRow = document.getElementById('labeltext-row');
-  var labeltextDots = [].slice.call(document.querySelectorAll('#labeltext-dots .color-dot'));
+  var labeltextDots = document.getElementById('labeltext-dots');
   var labeltextDirty = false;
   var labelshapeRow = document.getElementById('labelshape-row');
   var shapeBtns = [].slice.call(document.querySelectorAll('#labelshape-dots .shape-btn'));
@@ -925,7 +925,9 @@
   var photoEditItemId = null;
   var photoDirty = false;
 
-  function markActiveDots(dots, cur) {
+  function markActiveDots(wrap, cur) {
+    if (!wrap || !wrap.querySelectorAll) return;
+    var dots = wrap.querySelectorAll('.color-dot');
     for (var i = 0; i < dots.length; i++) {
       var on = dots[i].getAttribute('data-color') === cur;
       dots[i].className = on ? 'color-dot is-active' : 'color-dot';
