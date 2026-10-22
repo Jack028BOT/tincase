@@ -167,6 +167,23 @@
   width: 132px;
 }
 .color-dots { display: flex; align-items: center; flex: 1; }
+.color-dot-custom {
+  background: linear-gradient(135deg, #ff5da2, #ffd93d, #22d3ee);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+}
+.font-btn {
+  margin-right: 8px;
+  padding: 5px 14px;
+  font-size: 12px;
+  color: #8d4466;
+  background: #fff;
+  border: 2px solid #e77ba4;
+  border-radius: 14px;
+  cursor: pointer;
+}
+.font-btn.is-active { background: #f06292; border-color: #f06292; color: #fff; }
 .color-dot {
   width: 26px;
   height: 26px;

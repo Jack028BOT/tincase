@@ -136,6 +136,19 @@
     };
     entry.img.src = entry.url;
     imgPool[key] = entry;
+    /* 同时留一份压缩 dataURL，用于自动存档 */
+    var fr = new FileReader();
+    fr.onload = function () {
+      var im = new Image();
+      im.onload = function () {
+        prepareUpload(im, function (small, src) {
+          userImageSrc[key] = src;
+          scheduleSave();
+        });
+      };
+      im.src = fr.result;
+    };
+    fr.readAsDataURL(file);
   }
 
   /* ---------------- 背景绘制 ---------------- */
@@ -224,9 +237,16 @@
   var LABEL_COLOR = '#c2689a';
   var LABEL_TEXT_COLOR = '#ffffff';
 
-  function labelFont(size) {
-    return '700 ' + size + 'px -apple-system, "Segoe UI", "PingFang SC", sans-serif';
+  var FONT_STACKS = {
+    script: 'italic 700 {s}px "Brush Script MT", "Segoe Script", "Snell Roundhand", cursive',
+    round: '700 {s}px "Arial Rounded MT Bold", "YouYuan", "幼圆", -apple-system, "Segoe UI", "PingFang SC", sans-serif',
+    serif: '700 {s}px Georgia, "Times New Roman", "Songti SC", "SimSun", serif'
+  };
+  function itemFont(item, size) {
+    var name = item.font || (item.kind === 'script' ? 'script' : 'round');
+    return (FONT_STACKS[name] || FONT_STACKS.round).replace('{s}', size);
   }
+  function labelFont(size) { return FONT_STACKS.round.replace('{s}', size); }
 
   var OBJS = ['earbud', 'airpods', 'case_pink', 'glasses', 'tape', 'cd',
               'clip1', 'clip2', 'clip3', 'clip4', 'pin1', 'pin2',
@@ -521,7 +541,7 @@
 
   function drawTextItem(c, item) {
     if (item.kind === 'script') {
-      c.font = 'italic 700 116px "Brush Script MT", "Segoe Script", "Snell Roundhand", cursive';
+      c.font = itemFont(item, 116);
       c.textAlign = 'center';
       c.textBaseline = 'middle';
       c.shadowColor = 'rgba(180,80,130,0.4)';
@@ -567,24 +587,24 @@
       else if (shape === 'star') dy = 0;
       var fs = 36;
       if (badge) {
-        c.font = labelFont(36);
+        c.font = itemFont(item, 36);
         var tw = c.measureText(item.text).width;
         if (tw > item.w * 0.8) fs = Math.max(18, Math.floor(36 * item.w * 0.8 / tw));
       }
       c.fillStyle = item.textColor || LABEL_TEXT_COLOR;
-      c.font = labelFont(fs);
+      c.font = itemFont(item, fs);
       c.fillText(item.text, 0, dy);
     }
   }
 
-  function measureTextItem(kind, text) {
+  function measureTextItem(kind, text, font) {
     ctx.save();
     var w;
     if (kind === 'script') {
-      ctx.font = 'italic 700 116px "Brush Script MT", "Segoe Script", "Snell Roundhand", cursive';
+      ctx.font = (FONT_STACKS[font || 'script'] || FONT_STACKS.script).replace('{s}', 116);
       w = ctx.measureText(text).width + 40;
     } else {
-      ctx.font = labelFont(36);
+      ctx.font = (FONT_STACKS[font || 'round'] || FONT_STACKS.round).replace('{s}', 36);
       w = ctx.measureText(text).width + 44;
     }
     ctx.restore();
@@ -630,6 +650,7 @@
       stCountEl.textContent = String(state.items.length);
       stageHint.hidden = state.items.length > 0;
     }
+    scheduleSave();
   }
 
   /* 拖动/缩放中的重绘合并到每帧一次，避免高频 pointermove 卡顿 */
@@ -892,6 +913,10 @@
   var shapeBtns = [].slice.call(document.querySelectorAll('#labelshape-dots .shape-btn'));
   var shapeDirty = false;
 
+  var fontRow = document.getElementById('font-row');
+  var fontBtns = [].slice.call(document.querySelectorAll('#font-dots .font-btn'));
+  var fontDirty = false;
+
   var photoRow = document.getElementById('photo-row');
   var photoSlider = document.getElementById('photo-slider');
   var photoValEl = document.getElementById('photo-val');
@@ -925,6 +950,17 @@
     labelbgRow.hidden = !isLabel;
     labeltextRow.hidden = !isLabel;
     labelshapeRow.hidden = !isLabel;
+    /* 字体行：花体标题 / 短句标签通用 */
+    var isText = isScript || isLabel;
+    fontRow.hidden = !isText;
+    if (isText) {
+      fontDirty = false;
+      var curFont = it.font || (isScript ? 'script' : 'round');
+      for (var fi = 0; fi < fontBtns.length; fi++) {
+        fontBtns[fi].className = fontBtns[fi].getAttribute('data-font') === curFont
+          ? 'font-btn is-active' : 'font-btn';
+      }
+    }
     /* 照片编辑模式：切换选中对象时自动退出 */
     if (!isFrame || !it || it.id !== photoEditItemId) {
       photoEdit = false;
@@ -965,32 +1001,69 @@
     }
   }
 
-  function bindDots(dots, getIt, prop, def, flag) {
-    dots.forEach(function (dot) {
-      dot.addEventListener('click', function () {
-        var it = getIt();
-        if (!it) return;
-        var col = dot.getAttribute('data-color');
-        if ((it[prop] || def) === col) return;
-        if (!flag.v) { snapshot(); flag.v = true; }
-        it[prop] = col;
-        syncSlider();
-        render();
-      });
+  /* 扩展色板：17 常用色 + 自定义取色器 */
+  var PALETTE = ['#c2689a', '#f06292', '#f4a6b8', '#ff8fab',
+                 '#d43d51', '#e8654f', '#e0a52c', '#f7d94c',
+                 '#a8cf45', '#3f8f6b', '#6ecfb0', '#22d3ee',
+                 '#3d5a99', '#7d9bd8', '#7a5ba6', '#3a3335', '#ffffff'];
+  var customColorInput = document.getElementById('custom-color');
+  var customPick = null;
+
+  function buildColorDots(container, onPick) {
+    container.innerHTML = '';
+    for (var i = 0; i < PALETTE.length; i++) {
+      (function (col) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'color-dot';
+        b.setAttribute('data-color', col);
+        b.style.background = col;
+        b.addEventListener('click', function () { onPick(col); });
+        container.appendChild(b);
+      })(PALETTE[i]);
+    }
+    var cbtn = document.createElement('button');
+    cbtn.type = 'button';
+    cbtn.className = 'color-dot color-dot-custom';
+    cbtn.setAttribute('data-color', 'custom');
+    cbtn.setAttribute('aria-label', '自定义颜色');
+    cbtn.addEventListener('click', function () {
+      customPick = onPick;
+      customColorInput.click();
     });
+    container.appendChild(cbtn);
   }
-  bindDots(colorDots, function () {
-    var it = selected();
-    return it && it.kind === 'script' ? it : null;
-  }, 'color', SCRIPT_COLOR, { get v() { return colorDirty; }, set v(x) { colorDirty = x; } });
-  bindDots(labelbgDots, function () {
-    var it = selected();
-    return it && it.kind === 'label' ? it : null;
-  }, 'color', LABEL_COLOR, { get v() { return labelbgDirty; }, set v(x) { labelbgDirty = x; } });
-  bindDots(labeltextDots, function () {
-    var it = selected();
-    return it && it.kind === 'label' ? it : null;
-  }, 'textColor', LABEL_TEXT_COLOR, { get v() { return labeltextDirty; }, set v(x) { labeltextDirty = x; } });
+
+  function pickColor(getIt, prop, def, flag, col) {
+    var it = getIt();
+    if (!it) return;
+    if ((it[prop] || def) === col) return;
+    if (!flag.v) { snapshot(); flag.v = true; }
+    it[prop] = col;
+    syncSlider();
+    render();
+  }
+  buildColorDots(colorDots, function (col) {
+    pickColor(function () {
+      var it = selected();
+      return it && it.kind === 'script' ? it : null;
+    }, 'color', SCRIPT_COLOR, { get v() { return colorDirty; }, set v(x) { colorDirty = x; } }, col);
+  });
+  buildColorDots(labelbgDots, function (col) {
+    pickColor(function () {
+      var it = selected();
+      return it && it.kind === 'label' ? it : null;
+    }, 'color', LABEL_COLOR, { get v() { return labelbgDirty; }, set v(x) { labelbgDirty = x; } }, col);
+  });
+  buildColorDots(labeltextDots, function (col) {
+    pickColor(function () {
+      var it = selected();
+      return it && it.kind === 'label' ? it : null;
+    }, 'textColor', LABEL_TEXT_COLOR, { get v() { return labeltextDirty; }, set v(x) { labeltextDirty = x; } }, col);
+  });
+  customColorInput.addEventListener('input', function () {
+    if (customPick) customPick(customColorInput.value);
+  });
 
   shapeBtns.forEach(function (btn) {
     btn.addEventListener('click', function () {
@@ -1001,6 +1074,20 @@
       if (!shapeDirty) { snapshot(); shapeDirty = true; }
       it.shape = sh;
       it.h = labelHeight(sh, it.w);
+      syncSlider();
+      render();
+    });
+  });
+
+  fontBtns.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var it = selected();
+      if (!it || (it.kind !== 'script' && it.kind !== 'label')) return;
+      var f = btn.getAttribute('data-font');
+      if ((it.font || (it.kind === 'script' ? 'script' : 'round')) === f) return;
+      if (!fontDirty) { snapshot(); fontDirty = true; }
+      it.font = f;
+      if (it.kind === 'script') it.w = measureTextItem('script', it.text, f);
       syncSlider();
       render();
     });
@@ -1203,12 +1290,14 @@
     if (old) btn.removeChild(old);
     btn.classList.remove('is-filled');
     delete uploaded[slot];
+    delete uploadSlotSrc[slot];
     toast('第 ' + slot + ' 格已清空');
   }
 
   function fillUploadSlot(slot, src) {
     var btn = uploadBtn(slot);
     if (!btn) return;
+    uploadSlotSrc[slot] = src;
     var old = btn.getElementsByTagName('img')[0];
     if (old) btn.removeChild(old);
     var im = document.createElement('img');
@@ -1449,6 +1538,7 @@
       var im = new Image();
       im.onload = function () {
         customBgImg = im;
+        customBgSrc = reader.result;
         snapshot();
         state.bg = 'custom';
         var cell = document.getElementById('bg-upload');
@@ -1566,6 +1656,112 @@
     row.appendChild(up);
     syncBgSwatches();
   })();
+  /* ---------------- 自动存档 / 恢复 ---------------- */
+
+  var SAVE_KEY = 'tincase_work_v1';
+  var userImageSrc = {};   /* 相框照片 key -> dataURL */
+  var uploadSlotSrc = {};  /* 上传槽 slot -> dataURL */
+  var customBgSrc = null;  /* 自定义背景 dataURL */
+  var saveTimer = 0;
+  var saveWarned = false;
+
+  function scheduleSave() {
+    if (saveTimer) return;
+    saveTimer = setTimeout(function () {
+      saveTimer = 0;
+      saveWork();
+    }, 600);
+  }
+
+  function saveWork() {
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify({
+        v: 1,
+        bg: state.bg,
+        items: state.items,
+        userImages: userImageSrc,
+        uploadSlots: uploadSlotSrc,
+        customBg: customBgSrc
+      }));
+    } catch (err) {
+      if (!saveWarned) {
+        saveWarned = true;
+        toast('作品太大，本次改动可能无法自动保存');
+      }
+    }
+  }
+
+  function restoreWork() {
+    var raw = null;
+    try { raw = localStorage.getItem(SAVE_KEY); } catch (err) { return false; }
+    if (!raw) return false;
+    var data;
+    try { data = JSON.parse(raw); } catch (err) { return false; }
+    if (!data || !data.items || !data.items.length) return false;
+
+    /* 相框照片 */
+    var uimgs = data.userImages || {};
+    for (var uk in uimgs) {
+      if (!Object.prototype.hasOwnProperty.call(uimgs, uk)) continue;
+      (function (key, src) {
+        var entry = { img: new Image(), loaded: false };
+        entry.img.onload = function () { entry.loaded = true; render(); };
+        entry.img.src = src;
+        imgPool[key] = entry;
+      })(uk, uimgs[uk]);
+    }
+    userImageSrc = uimgs;
+
+    /* 上传槽 */
+    var slots = data.uploadSlots || {};
+    for (var s in slots) {
+      if (!Object.prototype.hasOwnProperty.call(slots, s)) continue;
+      (function (slot, src) {
+        var im = new Image();
+        im.onload = function () {
+          decalAssets['up_' + slot] = im;
+          fillUploadSlot(parseInt(slot, 10), src);
+          render();
+        };
+        im.src = src;
+      })(s, slots[s]);
+    }
+    uploadSlotSrc = slots;
+
+    /* 自定义背景 */
+    if (data.customBg) {
+      customBgSrc = data.customBg;
+      var bim = new Image();
+      bim.onload = function () {
+        customBgImg = bim;
+        var cell = document.getElementById('bg-upload');
+        if (cell) {
+          var old = cell.getElementsByTagName('img')[0];
+          if (old) cell.removeChild(old);
+          var thumb = document.createElement('img');
+          thumb.src = customBgSrc;
+          thumb.alt = '自定义背景';
+          cell.insertBefore(thumb, cell.firstChild);
+        }
+        syncBgSwatches();
+        render();
+      };
+      bim.src = data.customBg;
+      state.bg = 'custom';
+    } else {
+      state.bg = data.bg || 'bg_1';
+    }
+
+    /* 元素与 id 序号 */
+    state.items = data.items;
+    var maxId = 0;
+    for (var i = 0; i < state.items.length; i++) {
+      if (state.items[i].id > maxId) maxId = state.items[i].id;
+    }
+    nextId = maxId + 1;
+    return true;
+  }
+
   buildUploadRow();
   preloadBgs();
   preloadTiles();
@@ -1575,9 +1771,15 @@
   preloadObjs();
   undoStack = [];
   selectedId = null;
+  var restored = restoreWork();
   syncSlider();
   setZoom(100);
   render();
-  /* 首次进入引导：先看玩法说明，再选铁盒形状 */
-  modalHelpEl.hidden = false;
+  if (restored) {
+    /* 回访用户：直接回到上次作品，不再重复引导 */
+    toast('已恢复上次进度 ✓');
+  } else {
+    /* 首次进入引导：先看玩法说明，再选铁盒形状 */
+    modalHelpEl.hidden = false;
+  }
 })();
