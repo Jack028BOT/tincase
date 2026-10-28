@@ -31,6 +31,7 @@
 
   var state = { bg: 'bg_1', items: [] };
   var undoStack = [];
+  var redoStack = [];
   var nextId = 1;
   var selectedId = null;
   var defaultScale = 1;
@@ -99,13 +100,29 @@
   }
 
   function snapshot() {
+    redoStack.length = 0;
     undoStack.push(JSON.stringify({ bg: state.bg, items: state.items }));
     if (undoStack.length > 30) undoStack.shift();
   }
 
   function undo() {
     if (!undoStack.length) { toast('没有可撤销的操作'); return; }
+    redoStack.push(JSON.stringify({ bg: state.bg, items: state.items }));
+    if (redoStack.length > 30) redoStack.shift();
     var data = JSON.parse(undoStack.pop());
+    state.bg = data.bg;
+    state.items = data.items;
+    selectedId = null;
+    syncBgSwatches();
+    syncSlider();
+    render();
+  }
+
+  function redo() {
+    if (!redoStack.length) { toast('没有可重做的操作'); return; }
+    undoStack.push(JSON.stringify({ bg: state.bg, items: state.items }));
+    if (undoStack.length > 30) undoStack.shift();
+    var data = JSON.parse(redoStack.pop());
     state.bg = data.bg;
     state.items = data.items;
     selectedId = null;
@@ -136,19 +153,16 @@
     };
     entry.img.src = entry.url;
     imgPool[key] = entry;
-    /* 同时留一份压缩 dataURL，用于自动存档 */
-    var fr = new FileReader();
-    fr.onload = function () {
-      var im = new Image();
-      im.onload = function () {
-        prepareUpload(im, function (small, src) {
-          userImageSrc[key] = src;
-          scheduleSave();
-        });
-      };
-      im.src = fr.result;
-    };
-    fr.readAsDataURL(file);
+    /* 存档用的小图放后台生成，照片先上画布 */
+    decodeFile(file, function (err, src, w, h) {
+      if (err) return;
+      var cv = drawScaled(src, w, h);
+      if (src.close) src.close();
+      setTimeout(function () {
+        userImageSrc[key] = assetDataUrl(cv);
+        scheduleSave();
+      }, 150);
+    });
   }
 
   /* ---------------- 背景绘制 ---------------- */
@@ -264,9 +278,13 @@
     }
   }
 
+  /* 素材图源可能是 Image 也可能是 canvas（上传素材直接用缩小后的画布） */
+  function assetW(im) { return im ? (im.naturalWidth || im.width || 0) : 0; }
+  function assetH(im) { return im ? (im.naturalHeight || im.height || 0) : 0; }
+
   function drawDecal(c, item) {
     var im = decalAssets[item.decal];
-    if (im && im.complete && im.naturalWidth > 0) {
+    if (assetW(im) > 0) {
       c.save();
       c.shadowColor = 'rgba(60,30,40,0.22)';
       c.shadowBlur = 10;
@@ -739,6 +757,20 @@
     return null;
   }
 
+  /* 点按穿透：找指定元素之下的、同点位命中的元素（用于再点一下选中被压住的下层） */
+  function hitTestBelow(p, above) {
+    var end = state.items.indexOf(above);
+    for (var i = end - 1; i >= 0; i--) {
+      var it = state.items[i];
+      var dx = p.x - it.x, dy = p.y - it.y;
+      var a = -deg2rad(it.r);
+      var lx = (dx * Math.cos(a) - dy * Math.sin(a)) / it.s;
+      var ly = (dx * Math.sin(a) + dy * Math.cos(a)) / it.s;
+      if (Math.abs(lx) <= it.w / 2 + 6 && Math.abs(ly) <= it.h / 2 + 6) return it;
+    }
+    return null;
+  }
+
   var pointers = {};
   var pointerCount = 0;
   var drag = null;   /* {item, offX, offY, moved} 或照片模式 {item, photoMode, sx, sy, ox0, oy0, moved} */
@@ -765,14 +797,16 @@
 
     var it = hitTest(p);
     if (it) {
+      /* 是否点了已选中的元素：轻点不拖动时用于穿透选中下层 */
+      var tapCycle = (it.id === selectedId) && pointerCount === 1;
       selectedId = it.id;
       syncSlider();
       if (pointerCount === 1) {
         if (photoEdit && isFrameKind(it.kind) && it.photo) {
           /* 照片编辑模式：拖动平移相框内照片 */
-          drag = { item: it, photoMode: true, sx: p.x, sy: p.y, ox0: it.photo.ox || 0, oy0: it.photo.oy || 0, moved: false };
+          drag = { item: it, photoMode: true, sx: p.x, sy: p.y, ox0: it.photo.ox || 0, oy0: it.photo.oy || 0, moved: false, tapCycle: false };
         } else {
-          drag = { item: it, offX: p.x - it.x, offY: p.y - it.y, moved: false, sx: p.x, sy: p.y };
+          drag = { item: it, offX: p.x - it.x, offY: p.y - it.y, moved: false, sx: p.x, sy: p.y, tapCycle: tapCycle };
         }
       } else if (pointerCount === 2 && drag && drag.item === it) {
         var ids = Object.keys(pointers);
@@ -865,6 +899,11 @@
     pointerCount = Math.max(0, pointerCount - 1);
 
     if (drag && pointerCount === 0) {
+      /* 轻点已选中的元素且没拖动 → 穿透选中压在下面的那层 */
+      if (drag.tapCycle && !drag.moved) {
+        var under = hitTestBelow({ x: drag.sx, y: drag.sy }, drag.item);
+        if (under) { selectedId = under.id; syncSlider(); }
+      }
       drag = null;
       pinch = null;
       photoPinch = null;
@@ -925,6 +964,24 @@
   var photoEditItemId = null;
   var photoDirty = false;
 
+  var layerRow = document.getElementById('layer-row');
+  var layerUpBtn = document.getElementById('layer-up-btn');
+  var layerDownBtn = document.getElementById('layer-down-btn');
+  var layerTopBtn = document.getElementById('layer-top-btn');
+
+  /* 图层调整：数组越靠后越在上层；delta 1=上移一层 -1=下移一层 Infinity=置顶 */
+  function moveLayer(delta) {
+    var it = selected();
+    if (!it) { toast('先点选一个元素'); return; }
+    var idx = state.items.indexOf(it);
+    var ni = delta === Infinity ? state.items.length - 1 : idx + delta;
+    if (ni < 0 || ni >= state.items.length || ni === idx) return;
+    snapshot();
+    state.items.splice(idx, 1);
+    state.items.splice(ni, 0, it);
+    render();
+  }
+
   function markActiveDots(wrap, cur) {
     if (!wrap || !wrap.querySelectorAll) return;
     var dots = wrap.querySelectorAll('.color-dot');
@@ -969,6 +1026,7 @@
       photoEditItemId = it ? it.id : null;
     }
     photoRow.hidden = !isFrame;
+    layerRow.hidden = !it;
     if (isFrame) {
       photoDirty = false;
       var ph = it.photo || { z: 1, ox: 0, oy: 0 };
@@ -1144,6 +1202,10 @@
     render();
   });
 
+  layerUpBtn.addEventListener('click', function () { moveLayer(1); });
+  layerDownBtn.addEventListener('click', function () { moveLayer(-1); });
+  layerTopBtn.addEventListener('click', function () { moveLayer(Infinity); });
+
   sliderEl.addEventListener('input', function () {
     var pct = parseInt(sliderEl.value, 10);
     sliderValEl.textContent = pct + '%';
@@ -1222,11 +1284,12 @@
 
   function addDecal(key) {
     var im = decalAssets[key];
+    var aw = assetW(im), ah = assetH(im);
     var w = 320, h = 320;
-    if (im && im.naturalWidth > 0) {
-      var sc = 320 / Math.max(im.naturalWidth, im.naturalHeight);
-      w = Math.max(60, Math.round(im.naturalWidth * sc));
-      h = Math.max(60, Math.round(im.naturalHeight * sc));
+    if (aw > 0) {
+      var sc = 320 / Math.max(aw, ah);
+      w = Math.max(60, Math.round(aw * sc));
+      h = Math.max(60, Math.round(ah * sc));
     }
     addItem('decal', { decal: key, w: w, h: h, s: 1 });
   }
@@ -1247,6 +1310,7 @@
   var UPLOAD_SLOTS = 10;
   /* 手机原图动辄上千万像素，直接解码会撑爆内存；素材最大边压到 768 足够放大到 250% 使用 */
   var UPLOAD_MAX_SIDE = 768;
+  var THUMB_MAX_SIDE = 160;
   var uploaded = {};
   var pendingSlot = 0;
 
@@ -1285,7 +1349,7 @@
     uploadInput.click();
   }
 
-  function resetUploadSlot(slot) {
+  function resetUploadSlot(slot, silent) {
     var btn = uploadBtn(slot);
     if (!uploaded[slot] || !btn) return;
     var old = btn.getElementsByTagName('img')[0];
@@ -1293,7 +1357,7 @@
     btn.classList.remove('is-filled');
     delete uploaded[slot];
     delete uploadSlotSrc[slot];
-    toast('第 ' + slot + ' 格已清空');
+    if (!silent) toast('第 ' + slot + ' 格已清空');
   }
 
   function fillUploadSlot(slot, src) {
@@ -1310,7 +1374,47 @@
     uploaded[slot] = true;
   }
 
-  function hasTransparent(cc, w, h) {
+  /* 解码一次即可：能走 ImageBitmap 就不把原图转成 base64，直接让内核异步解码 */
+  function fitBox(w, h, maxSide) {
+    var sc = Math.min(1, maxSide / Math.max(w, h));
+    return { w: Math.max(1, Math.round(w * sc)), h: Math.max(1, Math.round(h * sc)) };
+  }
+
+  function drawScaled(src, w, h) {
+    var cv = document.createElement('canvas');
+    cv.width = w;
+    cv.height = h;
+    cv.getContext('2d').drawImage(src, 0, 0, w, h);
+    return cv;
+  }
+
+  function decodeViaImg(file, cb) {
+    var fr = new FileReader();
+    fr.onload = function () {
+      var im = new Image();
+      im.decoding = 'async';
+      im.onload = function () {
+        var box = fitBox(im.naturalWidth, im.naturalHeight, UPLOAD_MAX_SIDE);
+        cb(null, im, box.w, box.h);
+      };
+      im.onerror = function () { cb(new Error('decode')); };
+      im.src = fr.result;
+    };
+    fr.onerror = function () { cb(new Error('read')); };
+    fr.readAsDataURL(file);
+  }
+
+  function decodeFile(file, cb) {
+    if (!window.createImageBitmap) { decodeViaImg(file, cb); return; }
+    createImageBitmap(file).then(function (bmp) {
+      var box = fitBox(bmp.width, bmp.height, UPLOAD_MAX_SIDE);
+      cb(null, bmp, box.w, box.h);
+    }).catch(function () { decodeViaImg(file, cb); });
+  }
+
+  function hasTransparent(cv) {
+    var cc = cv.getContext('2d');
+    var w = cv.width, h = cv.height;
     var data;
     try { data = cc.getImageData(0, 0, w, h).data; } catch (err) { return true; }
     for (var y = 0; y < h; y += 3) {
@@ -1322,30 +1426,18 @@
     return false;
   }
 
-  function prepareUpload(im, cb) {
-    var maxSide = Math.max(im.naturalWidth, im.naturalHeight);
-    if (maxSide <= UPLOAD_MAX_SIDE) { cb(im, im.src); return; }
-    var sc = UPLOAD_MAX_SIDE / maxSide;
-    var w = Math.max(1, Math.round(im.naturalWidth * sc));
-    var h = Math.max(1, Math.round(im.naturalHeight * sc));
-    var cv = document.createElement('canvas');
-    cv.width = w;
-    cv.height = h;
-    var cc = cv.getContext('2d');
-    cc.drawImage(im, 0, 0, w, h);
-    var out;
+  /* 存档用图（恢复作品时当图源），透明留 PNG，照片用 JPEG 更省体积 */
+  function assetDataUrl(cv) {
     try {
-      out = hasTransparent(cc, w, h)
-        ? cv.toDataURL('image/png')
-        : cv.toDataURL('image/jpeg', 0.86);
+      return hasTransparent(cv) ? cv.toDataURL('image/png') : cv.toDataURL('image/jpeg', 0.84);
     } catch (err) {
-      cb(im, im.src);
-      return;
+      return '';
     }
-    var small = new Image();
-    small.onload = function () { cb(small, out); };
-    small.onerror = function () { cb(im, im.src); };
-    small.src = out;
+  }
+
+  function thumbOf(cv) {
+    var box = fitBox(cv.width, cv.height, THUMB_MAX_SIDE);
+    return drawScaled(cv, box.w, box.h).toDataURL('image/png');
   }
 
   uploadInput.addEventListener('change', function () {
@@ -1354,21 +1446,19 @@
     pendingSlot = 0;
     uploadInput.value = '';
     if (!file || !slot) return;
-    var reader = new FileReader();
-    reader.onload = function () {
-      var raw = new Image();
-      raw.onload = function () {
-        prepareUpload(raw, function (im, src) {
-          decalAssets['up_' + slot] = im;
-          fillUploadSlot(slot, src);
-          toast('第 ' + slot + ' 格好了，点它就能摆进盒子');
-        });
-      };
-      raw.onerror = function () { toast('这张图片读不出来，换一张试试'); };
-      raw.src = reader.result;
-    };
-    reader.onerror = function () { toast('图片读取失败，请重试'); };
-    reader.readAsDataURL(file);
+    decodeFile(file, function (err, src, w, h) {
+      if (err) { toast('这张图片读不出来，换一张试试'); return; }
+      var cv = drawScaled(src, w, h);
+      if (src.close) src.close();
+      /* 素材直接用缩小后的 canvas，省掉大图重新编码再解码的两次开销 */
+      decalAssets['up_' + slot] = cv;
+      fillUploadSlot(slot, thumbOf(cv));
+      toast('第 ' + slot + ' 格好了，点它就能摆进盒子');
+      setTimeout(function () {
+        uploadSlotSrc[slot] = assetDataUrl(cv);
+        scheduleSave();
+      }, 150);
+    });
   });
 
   /* ---------------- 工具栏 ---------------- */
@@ -1407,8 +1497,11 @@
           var act = e.currentTarget.getAttribute('data-act');
           closeMenus();
           if (act === 'clear') clearAll();
+          else if (act === 'new') newWork();
+          else if (act === 'works') openWorks();
           else if (act === 'save') saveImage();
           else if (act === 'undo') undo();
+          else if (act === 'redo') redo();
           else if (act === 'delete') {
             var it = selected();
             if (it) { snapshot(); removeItem(it.id); syncSlider(); render(); }
@@ -1658,9 +1751,15 @@
     row.appendChild(up);
     syncBgSwatches();
   })();
-  /* ---------------- 自动存档 / 恢复 ---------------- */
+  /* ---------------- 多作品存档 / 恢复 ---------------- */
 
-  var SAVE_KEY = 'tincase_work_v1';
+  var WORKS_KEY = 'tincase_works_v2';
+  var LEGACY_KEY = 'tincase_work_v1';
+  var worksList = [];      /* [{id,name,savedAt,thumb,data:{bg,items,userImages,uploadSlots,customBg}}] */
+  var currentWorkId = null;
+  var currentWorkName = '作品 1';
+  var worksModalEl = document.getElementById('modal-works');
+  var worksListEl = document.getElementById('works-list');
   var userImageSrc = {};   /* 相框照片 key -> dataURL */
   var uploadSlotSrc = {};  /* 上传槽 slot -> dataURL */
   var customBgSrc = null;  /* 自定义背景 dataURL */
@@ -1675,32 +1774,84 @@
     }, 600);
   }
 
-  function saveWork() {
+  function currentWork() {
+    for (var i = 0; i < worksList.length; i++) {
+      if (worksList[i].id === currentWorkId) return worksList[i];
+    }
+    return null;
+  }
+
+  function makeThumb() {
     try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({
-        v: 1,
-        bg: state.bg,
-        items: state.items,
-        userImages: userImageSrc,
-        uploadSlots: uploadSlotSrc,
-        customBg: customBgSrc
-      }));
+      var cv = document.createElement('canvas');
+      cv.width = 180; cv.height = 240;
+      var c2 = cv.getContext('2d');
+      c2.drawImage(canvas, 0, 0, W, H, 0, 0, 180, 240);
+      return cv.toDataURL('image/jpeg', 0.6);
+    } catch (err) { return ''; }
+  }
+
+  function persistWorks() {
+    try {
+      localStorage.setItem(WORKS_KEY, JSON.stringify({ works: worksList, currentId: currentWorkId }));
     } catch (err) {
       if (!saveWarned) {
         saveWarned = true;
-        toast('作品太大，本次改动可能无法自动保存');
+        toast('作品太多或太大，本次改动可能无法自动保存');
       }
     }
   }
 
-  function restoreWork() {
-    var raw = null;
-    try { raw = localStorage.getItem(SAVE_KEY); } catch (err) { return false; }
-    if (!raw) return false;
-    var data;
-    try { data = JSON.parse(raw); } catch (err) { return false; }
-    if (!data || !data.items || !data.items.length) return false;
+  function saveWork() {
+    var w = currentWork();
+    if (!w) return;
+    w.name = currentWorkName;
+    w.savedAt = Date.now();
+    w.thumb = makeThumb();
+    w.data = {
+      bg: state.bg,
+      items: state.items,
+      userImages: userImageSrc,
+      uploadSlots: uploadSlotSrc,
+      customBg: customBgSrc
+    };
+    persistWorks();
+  }
 
+  /* 读取作品库；首次运行时把旧版单作品存档迁移进来 */
+  function loadWorksStore() {
+    var raw = null;
+    try { raw = localStorage.getItem(WORKS_KEY); } catch (err) {}
+    if (raw) {
+      try {
+        var d = JSON.parse(raw);
+        if (d && d.works && d.works.length) {
+          worksList = d.works;
+          var cid = d.currentId;
+          for (var i = 0; i < worksList.length; i++) {
+            if (worksList[i].id === cid) return cid;
+          }
+          return worksList[0].id;
+        }
+      } catch (err) {}
+    }
+    var legacy = null;
+    try { legacy = localStorage.getItem(LEGACY_KEY); } catch (err) {}
+    var data = null;
+    if (legacy) { try { data = JSON.parse(legacy); } catch (err) {} }
+    var w = {
+      id: 'w' + Date.now().toString(36),
+      name: '作品 1',
+      savedAt: Date.now(),
+      thumb: '',
+      data: data && data.items ? data : { bg: 'bg_1', items: [], userImages: {}, uploadSlots: {}, customBg: null }
+    };
+    worksList = [w];
+    return w.id;
+  }
+
+  /* 把一份作品数据应用到画布（照片 / 上传槽 / 自定义背景 / 元素） */
+  function applyWorkData(data) {
     /* 相框照片 */
     var uimgs = data.userImages || {};
     for (var uk in uimgs) {
@@ -1751,6 +1902,7 @@
       bim.src = data.customBg;
       state.bg = 'custom';
     } else {
+      customBgSrc = null;
       state.bg = data.bg || 'bg_1';
     }
 
@@ -1763,6 +1915,241 @@
     nextId = maxId + 1;
     return true;
   }
+
+  function restoreWork() {
+    currentWorkId = loadWorksStore();
+    var w = currentWork();
+    if (!w) return false;
+    currentWorkName = w.name || '作品 1';
+    var data = w.data;
+    if (!data || !data.items || !data.items.length) return false;
+    return applyWorkData(data);
+  }
+
+  /* ---------------- 作品管理 ---------------- */
+
+  function fmtDate(ts) {
+    var d = new Date(ts);
+    return (d.getMonth() + 1) + '月' + d.getDate() + '日 ' +
+      ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  }
+
+  function openWorks() {
+    renderWorksList();
+    worksModalEl.hidden = false;
+  }
+
+  function renderWorksList() {
+    worksListEl.innerHTML = '';
+    var shown = [];
+    for (var i = 0; i < worksList.length; i++) {
+      var d = worksList[i].data;
+      if (d && d.items && d.items.length) shown.push(worksList[i]);
+    }
+    if (!shown.length) {
+      var tip = document.createElement('div');
+      tip.className = 'works-empty';
+      tip.textContent = '还没有保存的作品，做完一张会自动出现在这里';
+      worksListEl.appendChild(tip);
+      return;
+    }
+    for (var j = 0; j < shown.length; j++) {
+      (function (w) {
+        var card = document.createElement('div');
+        card.className = 'work-card' + (w.id === currentWorkId ? ' is-current' : '');
+        var th = document.createElement('img');
+        th.className = 'work-thumb';
+        if (w.thumb) { th.src = w.thumb; }
+        else {
+          var ph = document.createElement('canvas'); ph.width = 90; ph.height = 120;
+          th.src = ph.toDataURL();
+        }
+        th.alt = w.name;
+        card.appendChild(th);
+        var meta = document.createElement('div');
+        meta.className = 'work-meta';
+        var nm = document.createElement('span');
+        nm.className = 'work-name';
+        nm.textContent = (w.id === currentWorkId ? '✏️ ' : '') + w.name;
+        meta.appendChild(nm);
+        var dt = document.createElement('span');
+        dt.className = 'work-date';
+        dt.textContent = fmtDate(w.savedAt);
+        meta.appendChild(dt);
+        card.appendChild(meta);
+        var btns = document.createElement('div');
+        btns.className = 'work-btns';
+        if (w.id !== currentWorkId) {
+          var loadBtn = document.createElement('button');
+          loadBtn.className = 'tool-btn tool-btn-primary';
+          loadBtn.type = 'button';
+          loadBtn.textContent = '载入';
+          loadBtn.addEventListener('click', function () { loadWorkById(w.id); });
+          btns.appendChild(loadBtn);
+        } else {
+          var cur = document.createElement('span');
+          cur.className = 'work-cur-tag';
+          cur.textContent = '编辑中';
+          btns.appendChild(cur);
+        }
+        var rnBtn = document.createElement('button');
+        rnBtn.className = 'tool-btn';
+        rnBtn.type = 'button';
+        rnBtn.textContent = '改名';
+        rnBtn.addEventListener('click', function () { renameWork(w.id); });
+        btns.appendChild(rnBtn);
+        var delBtn = document.createElement('button');
+        delBtn.className = 'tool-btn';
+        delBtn.type = 'button';
+        delBtn.textContent = '删除';
+        delBtn.addEventListener('click', function () { deleteWork(w.id); });
+        btns.appendChild(delBtn);
+        card.appendChild(btns);
+        worksListEl.appendChild(card);
+      })(shown[j]);
+    }
+  }
+
+  function loadWorkById(id) {
+    var w = null;
+    for (var i = 0; i < worksList.length; i++) {
+      if (worksList[i].id === id) { w = worksList[i]; break; }
+    }
+    if (!w) return;
+    if (w.id === currentWorkId) { worksModalEl.hidden = true; return; }
+    /* 清掉当前作品的上传槽与自定义背景缩略图，避免残留到新作品 */
+    clearUploadSlotsUi();
+    var bgCell = document.getElementById('bg-upload');
+    if (bgCell) {
+      var oi = bgCell.getElementsByTagName('img')[0];
+      if (oi) bgCell.removeChild(oi);
+    }
+    applyWorkData(w.data);
+    currentWorkId = id;
+    currentWorkName = w.name || '作品 1';
+    undoStack = [];
+    redoStack = [];
+    selectedId = null;
+    photoEdit = false;
+    photoEditItemId = null;
+    syncBgSwatches();
+    syncSlider();
+    setZoom(100);
+    render();
+    worksModalEl.hidden = true;
+    toast('已打开「' + currentWorkName + '」');
+  }
+
+  function renameWork(id) {
+    var w = null;
+    for (var i = 0; i < worksList.length; i++) {
+      if (worksList[i].id === id) { w = worksList[i]; break; }
+    }
+    if (!w) return;
+    openInput('作品名称', '最多 12 个字', 12, w.name, function (v) {
+      if (!v) return;
+      w.name = v;
+      if (w.id === currentWorkId) currentWorkName = v;
+      persistWorks();
+      renderWorksList();
+      toast('已改名为「' + v + '」');
+    });
+  }
+
+  function deleteWork(id) {
+    var w = null;
+    for (var i = 0; i < worksList.length; i++) {
+      if (worksList[i].id === id) { w = worksList[i]; break; }
+    }
+    if (!w) return;
+    if (!window.confirm('确定删除「' + w.name + '」吗？删除后无法恢复。')) return;
+    for (var i = 0; i < worksList.length; i++) {
+      if (worksList[i].id === id) { worksList.splice(i, 1); break; }
+    }
+    if (id === currentWorkId) {
+      startBlankWork();
+    }
+    persistWorks();
+    renderWorksList();
+    toast('已删除');
+  }
+
+  function clearUploadSlotsUi() {
+    for (var i = 1; i <= UPLOAD_SLOTS; i++) {
+      resetUploadSlot(i, true);
+      delete decalAssets['up_' + i];
+    }
+  }
+
+  function clearCanvasUi() {
+    state.items = [];
+    selectedId = null;
+    nextId = 1;
+    userImageSrc = {};
+    uploadSlotSrc = {};
+    customBgSrc = null;
+    customBgImg = null;
+    undoStack = [];
+    redoStack = [];
+    photoEdit = false;
+    photoEditItemId = null;
+    clearUploadSlotsUi();
+    var cell = document.getElementById('bg-upload');
+    if (cell) {
+      var old = cell.getElementsByTagName('img')[0];
+      if (old) cell.removeChild(old);
+    }
+  }
+
+  /* 新建空白作品（当前作品已自动存档，不会丢失） */
+  function newWork() {
+    var w = {
+      id: 'w' + Date.now().toString(36),
+      name: '作品 ' + (worksList.length + 1),
+      savedAt: Date.now(),
+      thumb: '',
+      data: { bg: 'bg_1', items: [], userImages: {}, uploadSlots: {}, customBg: null }
+    };
+    worksList.push(w);
+    currentWorkId = w.id;
+    currentWorkName = w.name;
+    clearCanvasUi();
+    state.bg = 'bg_1';
+    syncBgSwatches();
+    syncSlider();
+    setZoom(100);
+    render();
+    persistWorks();
+    toast('新作品开始啦，旧作品已自动保存');
+  }
+
+  /* 删除当前作品后的兜底：建一个空白当前作品但不弹提示 */
+  function startBlankWork() {
+    var w = {
+      id: 'w' + Date.now().toString(36),
+      name: '作品 ' + (worksList.length + 1),
+      savedAt: Date.now(),
+      thumb: '',
+      data: { bg: 'bg_1', items: [], userImages: {}, uploadSlots: {}, customBg: null }
+    };
+    worksList.push(w);
+    currentWorkId = w.id;
+    currentWorkName = w.name;
+    clearCanvasUi();
+    state.bg = 'bg_1';
+    syncBgSwatches();
+    syncSlider();
+    setZoom(100);
+    render();
+  }
+
+  document.getElementById('works-new').addEventListener('click', function () {
+    newWork();
+    worksModalEl.hidden = true;
+  });
+  document.getElementById('works-close').addEventListener('click', function () {
+    worksModalEl.hidden = true;
+  });
 
   buildUploadRow();
   preloadBgs();
