@@ -81,9 +81,10 @@
     <div class="slider-row" id="layer-row" hidden>
       <span class="slider-cap slider-cap-small">图层</span>
       <div class="layer-btns">
-        <button class="tool-btn" id="layer-up-btn" type="button">上移一层</button>
-        <button class="tool-btn" id="layer-down-btn" type="button">下移一层</button>
+        <button class="tool-btn" id="layer-up-btn" type="button">上移</button>
+        <button class="tool-btn" id="layer-down-btn" type="button">下移</button>
         <button class="tool-btn" id="layer-top-btn" type="button">置顶</button>
+        <button class="tool-btn tool-btn-danger" id="layer-del-btn" type="button">删除</button>
       </div>
     </div>
 
@@ -143,7 +144,18 @@
         <button class="font-btn" type="button" data-font="script">手写</button>
         <button class="font-btn" type="button" data-font="round">圆润</button>
         <button class="font-btn" type="button" data-font="serif">衬线</button>
+        <button class="font-btn" type="button" data-font="heavy">黑体</button>
+        <button class="font-btn" type="button" data-font="kai">楷体</button>
+        <button class="font-btn" type="button" data-font="li">隶书</button>
+        <button class="font-btn" type="button" data-font="comic">趣味</button>
+        <button class="font-btn" type="button" data-font="fsong">仿宋</button>
       </div>
+    </div>
+
+    <div class="slider-row" id="fsize-row" hidden>
+      <span class="slider-cap slider-cap-small">字号</span>
+      <input class="size-slider" id="fsize-slider" type="range" min="50" max="160" step="5" value="100" />
+      <span class="slider-side"><span class="slider-val" id="fsize-val">100%</span></span>
     </div>
 
     <div class="stage-wrap" id="stage-wrap">
@@ -288,9 +300,9 @@
         <p>2. 「照片」选相册图（连拍条选 3 张），装进拍立得 / 连拍条 / 邮票框或相机相框。</p>
         <p>3. 「字母」输入名字自动拆成字母块；「图案」「摆件」「贴纸」「文字」随意点缀。</p>
         <p>4. 最下面「上传」行有 10 个位置：点空格传自己的图，之后点缩略图就能摆进盒子，点右上 × 可清空换图。</p>
-        <p>5. 选中「花体标题」「短句标签」可换字体（手写 / 圆润 / 衬线）和颜色——色板 17 种常用色，末尾「🎨」可选任意颜色；标签还能换底色、字色和便签形状。</p>
+        <p>5. 选中「花体标题」「短句标签」可换字体（8 种：手写 / 圆润 / 衬线 / 黑体 / 楷体 / 隶书 / 趣味 / 仿宋）、调字号、换颜色——色板 17 种常用色，末尾「🎨」可选任意颜色；输入时用 / 分隔可以多行；标签还能换底色、字色和便签形状。</p>
         <p>6. 选中相框或相机后，点「移动照片」再拖动，就能只动框里的照片、不动相框——照片会自动放大留出移动余量（也可用「照片」滑杆手动缩放，双指捏合同样可以），调好再点一次退出。</p>
-        <p>7. 拖动摆放，双指旋转缩放，滑杆调大小和角度；「图层」行可调上下顺序，再点一下已选中的元素可以选中压在下面的那层。</p>
+        <p>7. 拖动摆放，双指旋转缩放，滑杆调大小和角度；「图层」行可调上下顺序、删除元素，再点一下已选中的元素可以选中压在下面的那层。</p>
         <p>8. 「文件」菜单里能撤销 / 重做；每张作品自动保存，「我的作品」里可以同时存多张、改名字、随时载入。</p>
         <p>9. 完成后点「导出图片」保存到相册。做一半退出也不怕，下次打开自动恢复进度。</p>
       </div>

@@ -254,7 +254,12 @@
   var FONT_STACKS = {
     script: 'italic 700 {s}px "Brush Script MT", "Segoe Script", "Snell Roundhand", cursive',
     round: '700 {s}px "Arial Rounded MT Bold", "YouYuan", "幼圆", -apple-system, "Segoe UI", "PingFang SC", sans-serif',
-    serif: '700 {s}px Georgia, "Times New Roman", "Songti SC", "SimSun", serif'
+    serif: '700 {s}px Georgia, "Times New Roman", "Songti SC", "SimSun", serif',
+    heavy: '900 {s}px "Arial Black", Arial, "PingFang SC", "Microsoft YaHei", sans-serif',
+    kai: '700 {s}px KaiTi, "Kaiti SC", STKaiti, Kai, serif',
+    li: '700 {s}px LiSu, STLiti, "Baoli SC", "隶书", serif',
+    comic: '700 {s}px "Comic Sans MS", "Chalkboard SE", "Comic Neue", cursive',
+    fsong: '700 {s}px FangSong, "Fangsong SC", STFangsong, "仿宋", serif'
   };
   function itemFont(item, size) {
     var name = item.font || (item.kind === 'script' ? 'script' : 'round');
@@ -558,15 +563,21 @@
   }
 
   function drawTextItem(c, item) {
+    var lines = textLinesOf(item.text);
+    var tsc = item.fontScale || 1;
     if (item.kind === 'script') {
-      c.font = itemFont(item, 116);
+      var fsz = Math.round(116 * tsc);
+      c.font = itemFont(item, fsz);
       c.textAlign = 'center';
       c.textBaseline = 'middle';
       c.shadowColor = 'rgba(180,80,130,0.4)';
       c.shadowBlur = 8;
       c.shadowOffsetY = 4;
       c.fillStyle = item.color || SCRIPT_COLOR;
-      c.fillText(item.text, 0, 0);
+      var slh = fsz * 1.02;
+      for (var si = 0; si < lines.length; si++) {
+        c.fillText(lines[si], 0, (si - (lines.length - 1) / 2) * slh);
+      }
       c.shadowColor = 'transparent';
       c.shadowBlur = 0;
       c.shadowOffsetY = 0;
@@ -603,30 +614,65 @@
       if (shape === 'bubble') dy = -12;
       else if (shape === 'heart') dy = -item.h * 0.18;
       else if (shape === 'star') dy = 0;
-      var fs = 36;
+      var fs = Math.round(36 * tsc);
       if (badge) {
-        c.font = itemFont(item, 36);
-        var tw = c.measureText(item.text).width;
-        if (tw > item.w * 0.8) fs = Math.max(18, Math.floor(36 * item.w * 0.8 / tw));
+        c.font = itemFont(item, fs);
+        var tw = 0;
+        for (var bi = 0; bi < lines.length; bi++) {
+          var lw = c.measureText(lines[bi]).width;
+          if (lw > tw) tw = lw;
+        }
+        if (tw > item.w * 0.8) fs = Math.max(14, Math.floor(fs * item.w * 0.8 / tw));
       }
       c.fillStyle = item.textColor || LABEL_TEXT_COLOR;
       c.font = itemFont(item, fs);
-      c.fillText(item.text, 0, dy);
+      var tlh = fs * 1.3;
+      for (var ti = 0; ti < lines.length; ti++) {
+        c.fillText(lines[ti], 0, dy + (ti - (lines.length - 1) / 2) * tlh);
+      }
     }
   }
 
   function measureTextItem(kind, text, font) {
+    return textSizeFor(kind, text, font, 1, 'rect').w;
+  }
+
+  /* 文字按「/」拆成多行；返回适配当前字体/字号/形状的宽高 */
+  function textLinesOf(t) {
+    var parts = String(t).split('/');
+    var lines = [];
+    for (var i = 0; i < parts.length; i++) {
+      var s = parts[i].replace(/^\s+|\s+$/g, '');
+      if (s) lines.push(s);
+    }
+    return lines.length ? lines : [''];
+  }
+
+  function textSizeFor(kind, text, font, scale, shape) {
+    var sc = scale || 1;
+    var lines = textLinesOf(text);
+    var base = kind === 'script' ? 116 : 36;
+    var maxw = 0;
     ctx.save();
-    var w;
-    if (kind === 'script') {
-      ctx.font = (FONT_STACKS[font || 'script'] || FONT_STACKS.script).replace('{s}', 116);
-      w = ctx.measureText(text).width + 40;
-    } else {
-      ctx.font = (FONT_STACKS[font || 'round'] || FONT_STACKS.round).replace('{s}', 36);
-      w = ctx.measureText(text).width + 44;
+    ctx.font = (FONT_STACKS[font || (kind === 'script' ? 'script' : 'round')] || FONT_STACKS.round).replace('{s}', Math.round(base * sc));
+    for (var i = 0; i < lines.length; i++) {
+      var lw = ctx.measureText(lines[i]).width;
+      if (lw > maxw) maxw = lw;
     }
     ctx.restore();
-    return Math.max(80, w);
+    var w = Math.max(80, maxw + (kind === 'script' ? 40 : 44));
+    var lh = Math.round(base * sc * 1.3);
+    var h;
+    if (kind === 'script') {
+      h = Math.max(150, Math.round(lines.length * base * sc * 1.05) + 30);
+    } else if (shape === 'bubble') {
+      h = Math.max(92, lines.length * lh + 44);
+    } else if (shape === 'heart' || shape === 'star') {
+      h = Math.max(labelHeight(shape, w), lines.length * lh + 24);
+    } else {
+      h = Math.max(68, lines.length * lh + 24);
+    }
+    return { w: Math.round(w), h: Math.round(h) };
   }
 
   function drawItem(c, item) {
@@ -956,6 +1002,11 @@
   var fontBtns = [].slice.call(document.querySelectorAll('#font-dots .font-btn'));
   var fontDirty = false;
 
+  var fsizeRow = document.getElementById('fsize-row');
+  var fsizeSlider = document.getElementById('fsize-slider');
+  var fsizeValEl = document.getElementById('fsize-val');
+  var fsizeDirty = false;
+
   var photoRow = document.getElementById('photo-row');
   var photoSlider = document.getElementById('photo-slider');
   var photoValEl = document.getElementById('photo-val');
@@ -968,6 +1019,7 @@
   var layerUpBtn = document.getElementById('layer-up-btn');
   var layerDownBtn = document.getElementById('layer-down-btn');
   var layerTopBtn = document.getElementById('layer-top-btn');
+  var layerDelBtn = document.getElementById('layer-del-btn');
 
   /* 图层调整：数组越靠后越在上层；delta 1=上移一层 -1=下移一层 Infinity=置顶 */
   function moveLayer(delta) {
@@ -1019,6 +1071,9 @@
         fontBtns[fi].className = fontBtns[fi].getAttribute('data-font') === curFont
           ? 'font-btn is-active' : 'font-btn';
       }
+      fsizeDirty = false;
+      fsizeSlider.value = String(Math.min(160, Math.max(50, Math.round((it.fontScale || 1) * 100))));
+      fsizeValEl.textContent = fsizeSlider.value + '%';
     }
     /* 照片编辑模式：切换选中对象时自动退出 */
     if (!isFrame || !it || it.id !== photoEditItemId) {
@@ -1133,7 +1188,9 @@
       if ((it.shape || 'rect') === sh) return;
       if (!shapeDirty) { snapshot(); shapeDirty = true; }
       it.shape = sh;
-      it.h = labelHeight(sh, it.w);
+      var ssz = textSizeFor('label', it.text, it.font, it.fontScale || 1, sh);
+      it.w = ssz.w;
+      it.h = ssz.h;
       syncSlider();
       render();
     });
@@ -1147,10 +1204,27 @@
       if ((it.font || (it.kind === 'script' ? 'script' : 'round')) === f) return;
       if (!fontDirty) { snapshot(); fontDirty = true; }
       it.font = f;
-      if (it.kind === 'script') it.w = measureTextItem('script', it.text, f);
+      var fsz = textSizeFor(it.kind, it.text, f, it.fontScale || 1, it.shape || 'rect');
+      it.w = fsz.w;
+      it.h = fsz.h;
       syncSlider();
       render();
     });
+  });
+
+  fsizeSlider.addEventListener('input', function () {
+    var it = selected();
+    if (!it || (it.kind !== 'script' && it.kind !== 'label')) return;
+    if (!fsizeDirty) { snapshot(); fsizeDirty = true; }
+    it.fontScale = parseInt(fsizeSlider.value, 10) / 100;
+    fsizeValEl.textContent = fsizeSlider.value + '%';
+    var sz = textSizeFor(it.kind, it.text, it.font, it.fontScale, it.shape || 'rect');
+    it.w = sz.w;
+    it.h = sz.h;
+    render();
+  });
+  fsizeSlider.addEventListener('change', function () {
+    fsizeDirty = false;
   });
 
   rotateSlider.addEventListener('input', function () {
@@ -1205,6 +1279,14 @@
   layerUpBtn.addEventListener('click', function () { moveLayer(1); });
   layerDownBtn.addEventListener('click', function () { moveLayer(-1); });
   layerTopBtn.addEventListener('click', function () { moveLayer(Infinity); });
+  layerDelBtn.addEventListener('click', function () {
+    var it = selected();
+    if (!it) { toast('先点选一个元素'); return; }
+    snapshot();
+    removeItem(it.id);
+    syncSlider();
+    render();
+  });
 
   sliderEl.addEventListener('input', function () {
     var pct = parseInt(sliderEl.value, 10);
@@ -1512,14 +1594,8 @@
     })(menus[mi]);
   }
   document.addEventListener('click', closeMenus);
-  var firstRunHelp = true;
   document.getElementById('help-ok').addEventListener('click', function () {
     modalHelpEl.hidden = true;
-    /* 首次进入：看完玩法说明接着选铁盒形状 */
-    if (firstRunHelp) {
-      firstRunHelp = false;
-      modalTinEl.hidden = false;
-    }
   });
 
   /* ---------------- 弹窗输入 ---------------- */
@@ -1582,13 +1658,19 @@
              add === 'stPetal' || add === 'stBow' || add === 'stKeychain') addItem(add);
     else if (add && add.indexOf('bead_') === 0) addItem('tile', { ch: add.slice(5) });
     else if (add === 'script') {
-      openInput('花体标题', '英文花体更有感觉，最多 16 字符', 16, '', function (v) {
-        if (v) addItem('script', { text: v, w: measureTextItem('script', v), h: 150 });
+      openInput('花体标题', '英文花体更有感觉，最多 16 字符，用 / 分隔可多行', 16, '', function (v) {
+        if (v) {
+          var sz = textSizeFor('script', v, 'script', 1, 'rect');
+          addItem('script', { text: v, w: sz.w, h: sz.h });
+        }
       });
     }
     else if (add === 'label') {
-      openInput('短句标签', '如 사랑해 / 나도 / Lucky Me!', 16, '', function (v) {
-        if (v) addItem('label', { text: v, w: measureTextItem('label', v), h: 68, shape: 'rect' });
+      openInput('短句标签', '如 사랑해 / 나도 / Lucky Me!（用 / 分隔可换行）', 16, '', function (v) {
+        if (v) {
+          var sz = textSizeFor('label', v, 'round', 1, 'rect');
+          addItem('label', { text: v, w: sz.w, h: sz.h, shape: 'rect' });
+        }
       });
     }
     else if (add === 'rectpol' || add === 'polaroid' || add === 'strip' || add === 'heart' || add === 'stamp' ||
@@ -2168,7 +2250,7 @@
     /* 回访用户：直接回到上次作品，不再重复引导 */
     toast('已恢复上次进度 ✓');
   } else {
-    /* 首次进入引导：先看玩法说明，再选铁盒形状 */
-    modalHelpEl.hidden = false;
+    /* 首次进入：直接选铁盒形状（玩法说明随时可从「帮助」菜单打开） */
+    modalTinEl.hidden = false;
   }
 })();

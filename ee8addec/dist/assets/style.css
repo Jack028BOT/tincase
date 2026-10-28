@@ -132,6 +132,7 @@
 }
 .tool-btn:active { transform: translateY(1px); box-shadow: none; }
 .tool-btn-primary { color: #fff; background: #f06292; }
+.tool-btn-danger { color: #fff; background: #e05a6b; }
 .tool-space { flex: 1; min-width: 0; }
 .toolbar .tool-btn {
   flex-shrink: 0;
